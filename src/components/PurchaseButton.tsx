@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useKindeAuth } from "@kinde-oss/kinde-auth-react";
+import { useAuth } from "@/lib/use-auth";
 import { createCheckoutSession } from "@/lib/api-client";
 
 export function PurchaseButton({ bundleId }: { bundleId: string }) {
-  const { isAuthenticated, login, getToken } = useKindeAuth();
+  const { isAuthenticated, login, getToken } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

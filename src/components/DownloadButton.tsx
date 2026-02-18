@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useKindeAuth } from "@kinde-oss/kinde-auth-react";
+import { useAuth } from "@/lib/use-auth";
 import { fetchDownloadUrl } from "@/lib/api-client";
 
 interface DownloadButtonProps {
@@ -11,7 +11,7 @@ interface DownloadButtonProps {
 }
 
 export function DownloadButton({ bundleId, fileKey, label }: DownloadButtonProps) {
-  const { getToken } = useKindeAuth();
+  const { getToken } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

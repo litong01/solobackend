@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useKindeAuth } from "@kinde-oss/kinde-auth-react";
+import { useAuth } from "@/lib/use-auth";
 import { fetchEntitlements } from "@/lib/api-client";
 import { DownloadButton } from "@/components/DownloadButton";
 import { EntitlementWithBundle } from "@/types/api";
@@ -15,7 +15,7 @@ function formatPrice(price: number): string {
 }
 
 export default function LibraryPage() {
-  const { isAuthenticated, isLoading, login, getToken } = useKindeAuth();
+  const { isAuthenticated, isLoading, login, getToken } = useAuth();
   const [entitlements, setEntitlements] = useState<EntitlementWithBundle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

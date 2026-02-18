@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useKindeAuth } from "@kinde-oss/kinde-auth-react";
+import { useAuth } from "@/lib/use-auth";
 
 export function Header() {
-  const { isAuthenticated, isLoading, user, login, logout } = useKindeAuth();
+  const { isAuthenticated, isLoading, user, login, logout } = useAuth();
 
   return (
     <header className="border-b border-gray-200 bg-white">
