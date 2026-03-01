@@ -1,0 +1,23 @@
+---
+description: Use start.sh for building, running the app, and tests; do not use other tools or scripts
+alwaysApply: true
+---
+
+# Run Build, App, and Tests via start.sh
+
+For this project, **always use the project script** for building the image, running the application, and running tests.
+
+## Commands
+
+- **Build image:** `./start.sh build`
+- **Start app (Postgres + backend):** `./start.sh up`
+- **Stop app:** `./start.sh down` — stop and remove both containers
+- **Run tests:** `./start.sh test` (uses the `test` script in package.json when present)
+
+## Behavior
+
+- **Starting the app:** Use `./start.sh up`. To rebuild first: `./start.sh build && ./start.sh up`.
+- **Running tests:** Use `./start.sh test`. If tests need the app/DB, run `./start.sh up` first (or ensure they are already running).
+- **Do not** suggest or use other commands to build, start Postgres, Docker, or the backend (e.g. docker-compose, other scripts, or manual `docker run`), unless the user explicitly asks for an alternative.
+
+When the user wants to "build", "start the app", "run the app", or "run tests", default to these **`start.sh`** subcommands.

@@ -172,14 +172,35 @@ docker exec solobackend node -e "require('./scripts/migrate')"
 
 ### Cloud deployment
 
-The container runs on any Docker-compatible platform:
+The container runs on any Docker-compatible platform. For **Google Cloud Run** this repo provides a `service.yaml` that uses Secret Manager for all configuration (no hardcoded secrets).
 
-- **Google Cloud Run** — `gcloud run deploy solobackend --image gcr.io/PROJECT/solobackend`
-- **AWS ECS / Fargate** — push to ECR, create task definition
-- **Fly.io** — `fly launch`
-- **Railway / Render** — connect repo, point to Dockerfile
+#### Google Cloud Run (Secret Manager)
 
-Set all environment variables in your cloud provider's dashboard.
+1. **Build and push the image** to Artifact Registry, e.g.:
+   ```bash
+   docker build -t REGION-docker.pkg.dev/PROJECT_ID/REPO_NAME/solobackend:latest .
+   docker push REGION-docker.pkg.dev/PROJECT_ID/REPO_NAME/solobackend:latest
+   ```
+
+2. **Create one Secret Manager secret per variable** (same names as in `.env.local`). Example for one variable:
+   ```bash
+   echo -n "https://your-app.run.app" | gcloud secrets create NEXT_PUBLIC_SITE_URL --data-file=-
+   ```
+   Create each of: `NEXT_PUBLIC_SITE_URL`, `DATABASE_URL`, `NEXT_PUBLIC_KINDE_ISSUER_URL`, `NEXT_PUBLIC_KINDE_CLIENT_ID`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `CLOUDFLARE_R2_ACCOUNT_ID`, `CLOUDFLARE_R2_ACCESS_KEY`, `CLOUDFLARE_R2_SECRET_KEY`, `CLOUDFLARE_R2_BUCKET`. Use your production values (e.g. Cloud SQL connection string for `DATABASE_URL`).
+
+3. **Edit `service.yaml`**: set `containers[0].image` to your image URI (replace `IMAGE_PLACEHOLDER`).
+
+4. **Deploy**:
+   ```bash
+   gcloud run services replace service.yaml
+   ```
+   Ensure the Cloud Run service account has `roles/secretmanager.secretAccessor` on these secrets (or on the project).
+
+#### Other platforms
+
+- **AWS ECS / Fargate** — push to ECR, create task definition, use Secrets Manager or SSM for env.
+- **Fly.io** — `fly launch`, set secrets via `fly secrets set`.
+- **Railway / Render** — connect repo, set environment variables in the dashboard.
 
 ---
 

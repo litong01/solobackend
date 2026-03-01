@@ -1,0 +1,99 @@
+# Cloud Run service for SoloBackend.
+#
+# Before deploying:
+# 1. Replace IMAGE_PLACEHOLDER with your image URI, e.g.:
+#    us-central1-docker.pkg.dev/YOUR_PROJECT_ID/YOUR_REPO/solobackend:latest
+# 2. Create each of the following secrets in Secret Manager (same project).
+#    Secret ID must match the env var name below; add a version with the value.
+#
+#    Required secrets (one per .env.local variable):
+#    - NEXT_PUBLIC_SITE_URL
+#    - DATABASE_URL
+#    - NEXT_PUBLIC_KINDE_ISSUER_URL
+#    - NEXT_PUBLIC_KINDE_CLIENT_ID
+#    - STRIPE_SECRET_KEY
+#    - STRIPE_WEBHOOK_SECRET
+#    - CLOUDFLARE_R2_ACCOUNT_ID
+#    - CLOUDFLARE_R2_ACCESS_KEY
+#    - CLOUDFLARE_R2_SECRET_KEY
+#    - CLOUDFLARE_R2_BUCKET
+#
+# 3. Ensure the Cloud Run service account has roles/secretmanager.secretAccessor
+#    on these secrets (or on the project).
+#
+# Deploy: gcloud run services replace service.yaml
+# Or:    gcloud run deploy solobackend --source . (then add secrets via console/CLI)
+#
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: solobackend
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - image: IMAGE_PLACEHOLDER
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NEXT_PUBLIC_SITE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: NEXT_PUBLIC_SITE_URL
+                  key: latest
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: DATABASE_URL
+                  key: latest
+            - name: NEXT_PUBLIC_KINDE_ISSUER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: NEXT_PUBLIC_KINDE_ISSUER_URL
+                  key: latest
+            - name: NEXT_PUBLIC_KINDE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: NEXT_PUBLIC_KINDE_CLIENT_ID
+                  key: latest
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: STRIPE_SECRET_KEY
+                  key: latest
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: STRIPE_WEBHOOK_SECRET
+                  key: latest
+            - name: CLOUDFLARE_R2_ACCOUNT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: CLOUDFLARE_R2_ACCOUNT_ID
+                  key: latest
+            - name: CLOUDFLARE_R2_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: CLOUDFLARE_R2_ACCESS_KEY
+                  key: latest
+            - name: CLOUDFLARE_R2_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: CLOUDFLARE_R2_SECRET_KEY
+                  key: latest
+            - name: CLOUDFLARE_R2_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: CLOUDFLARE_R2_BUCKET
+                  key: latest
+  traffic:
+    - percent: 100
+      latestRevision: true
