@@ -58,23 +58,28 @@ Stripe handles checkout and payment processing for **paid** bundles. Users are r
 | Variable | What it is | How to obtain it |
 |----------|-----------|-----------------|
 | `STRIPE_SECRET_KEY` | Server-side API key | Go to [stripe.com](https://stripe.com) → Dashboard → **Developers → API keys**. Copy the **Secret key**. Starts with `sk_test_` (test mode) or `sk_live_` (production). |
-| `STRIPE_WEBHOOK_SECRET` | Verifies webhook authenticity | See below — differs for local vs. production. Starts with `whsec_`. |
+| `STRIPE_WEBHOOK_SECRET` | Verifies webhook authenticity | See below — differs for local vs. production. Starts with `whsec_`. In Docker with `STRIPE_SECRET_KEY=sk_test_...`, the entrypoint sets this automatically (no need to set it). |
 
-**Getting the webhook secret — local development:**
+**How to get `STRIPE_WEBHOOK_SECRET`**
 
-```bash
-# Install the Stripe CLI: https://stripe.com/docs/stripe-cli
-stripe listen --forward-to localhost:3000/api/stripe/webhook
-```
+The app uses this secret to verify that webhook requests really come from Stripe (so no one can fake a "payment completed" call). Without it, the webhook handler will reject events and purchases won’t grant access to bundles. You need a different secret for local development vs production.
 
-The CLI prints a signing secret like `whsec_...` — use that as `STRIPE_WEBHOOK_SECRET`.
-
-**Getting the webhook secret — production:**
-
-1. In the Stripe Dashboard, go to **Developers → Webhooks → Add endpoint**.
-2. Set the URL to `https://your-production-domain.com/api/stripe/webhook`.
-3. Under "Select events to listen to", choose **`checkout.session.completed`** and **`charge.refunded`**.
-4. After creating the endpoint, click into it and reveal the **Signing secret**.
+- **Local development (sandbox / test mode):** Stripe can’t send webhooks to `localhost`, so use the Stripe CLI to forward events and get a signing secret. The secret is **not** from the Stripe website — the CLI generates or assigns it when you run `stripe listen` (on the fly). If you restart the CLI, you may get a new secret and need to update `.env.local`.
+  1. Install the [Stripe CLI](https://stripe.com/docs/stripe-cli).
+  2. Run:
+     ```bash
+     stripe listen --forward-to localhost:3000/api/stripe/webhook
+     ```
+  3. The CLI prints a line like: `Your webhook signing secret is whsec_xxxxxxxxxxxx`.
+  4. Copy that value into `.env.local` as `STRIPE_WEBHOOK_SECRET=whsec_xxxxxxxxxxxx`.
+  5. Restart your app and keep `stripe listen` running while you test purchases.
+- **Production:** Use the Stripe Dashboard so Stripe can send events to your live URL.
+  1. In the [Stripe Dashboard](https://dashboard.stripe.com), go to **Developers → Webhooks**.
+  2. Click **Add endpoint**.
+  3. Set **Endpoint URL** to `https://your-production-domain.com/api/stripe/webhook`.
+  4. Under "Select events to listen to", choose **`checkout.session.completed`** and **`charge.refunded`**.
+  5. Create the endpoint, then open it and click **Reveal** next to **Signing secret**.
+  6. Copy the `whsec_...` value and set it as `STRIPE_WEBHOOK_SECRET` in your production environment (e.g. Cloud Run secrets, `.env` on the server, or your platform’s env config).
 
 Both values are server-only (never exposed to the browser).
 
@@ -107,6 +112,8 @@ When a purchase is refunded (via the app’s **POST /api/purchase/refund** or fr
 **Small sales:** For small charges (e.g. $0.50), 30¢ + 2.9% can exceed the sale amount or leave almost nothing for the customer. The restocking fee is **capped** so it never exceeds a percentage of the charge; the customer always gets at least that share back. Set **`STRIPE_RESTOCKING_FEE_MAX_PERCENT`** (default `50`): the restocking fee is at most this % of the charge, so the customer gets at least **(100 − MAX_PERCENT)%** refunded. Example: for a 50¢ charge with default 50% cap, fee = min(31¢, 25¢) = 25¢, so the customer receives 25¢ back.
 
 The refund API response includes `amount_refunded_to_customer` and `restocking_fee_cents` so the UI can show the net refund and the retained fee. Access to the bundle is revoked as soon as the refund is created.
+
+**Refund window:** Refunds are only allowed within **7 days** of the purchase date. After that, the API returns `403` with `error: "refund_window_closed"`. Configure with **`STRIPE_REFUND_WINDOW_DAYS`** (default `7`). This check is enforced **server-side only**; the app does not expose a refund button in the UI, and the same 7-day rule applies to direct API calls so the window cannot be bypassed.
 
 Refunds triggered in the Dashboard are full refunds (no restocking fee); use the app’s refund endpoint if you want the restocking fee applied.
 
@@ -354,7 +361,9 @@ solobackend/
 
 A full **OpenAPI 3.0** specification is in the repo root: **`openapi.yaml`**. Use it to generate client SDKs, validate requests, or view in Swagger UI (e.g. [Swagger Editor](https://editor.swagger.io/) or `npx @redocly/cli preview openapi.yaml`).
 
-**Swagger UI in the app:** In **development** (`npm run dev`) or when Swagger is enabled, open **`/api-docs`** in the browser. The spec is served at `GET /api/openapi` (JSON). **Docker:** Add `ENABLE_SWAGGER_UI=true` to `.env.local`, then run `./start.sh build` (the script passes it as a build-arg so the app is built with Swagger on) and `./start.sh up`.
+**Swagger UI in the app:** In **development** (`npm run dev`) or when using a Stripe **test** key (`STRIPE_SECRET_KEY` starting with `sk_test_`), open **`/api-docs`** in the browser. The spec is served at `GET /api/openapi` (JSON). **Docker:** Run `./start.sh build` and `./start.sh up` with `STRIPE_SECRET_KEY=sk_test_...` in `.env.local` (or your run env).
+
+When **`STRIPE_SECRET_KEY`** starts with **`sk_test_`**, the app treats that as dev/test mode: **Swagger UI** is enabled, and in Docker the entrypoint runs **`stripe listen`** inside the container, captures the webhook signing secret, and sets **`STRIPE_WEBHOOK_SECRET`** for the app. You don’t need a separate flag or to run `stripe listen` on the host. The image always includes the Stripe CLI (~8 MB).
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|

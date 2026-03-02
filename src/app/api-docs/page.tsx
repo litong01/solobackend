@@ -27,13 +27,10 @@ export default function ApiDocsPage() {
       <div className="mx-auto max-w-2xl px-4 py-16 text-center">
         <h1 className="text-2xl font-bold text-gray-900">API Docs (Swagger)</h1>
         <p className="mt-4 text-gray-600">
-          Swagger UI is disabled in this environment. To enable it, set{" "}
-          <code className="rounded bg-gray-100 px-1.5 py-0.5 text-sm">
-            ENABLE_SWAGGER_UI=true
-          </code>{" "}
-          in <code className="rounded bg-gray-100 px-1.5 py-0.5 text-sm">.env.local</code> and
-          pass it to the container (e.g. <code className="rounded bg-gray-100 px-1.5 py-0.5 text-sm">--env-file .env.local</code>),
-          then restart the container.
+          Swagger UI is disabled in this environment. To enable it, use a Stripe{" "}
+          <strong>test</strong> key in <code className="rounded bg-gray-100 px-1.5 py-0.5 text-sm">STRIPE_SECRET_KEY</code> (i.e. one
+          that starts with <code className="rounded bg-gray-100 px-1.5 py-0.5 text-sm">sk_test_</code>). In dev/test mode, Swagger and
+          webhook forwarding are enabled automatically.
         </p>
         <Link
           href="/"

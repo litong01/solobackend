@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 
 /**
- * Returns whether Swagger UI is enabled (for runtime env check in Docker).
- * Uses bracket notation so the bundler does not inline the value at build time.
+ * Returns whether Swagger UI is enabled.
+ * Enabled in development or when using a Stripe test key (sk_test_...) so one env var drives dev mode.
  */
 export async function GET() {
   const nodeEnv = process.env.NODE_ENV;
-  const swaggerFlag = process.env["ENABLE_SWAGGER_UI"];
-  const enabled =
-    nodeEnv === "development" || swaggerFlag === "true";
+  const stripeKey = process.env["STRIPE_SECRET_KEY"] ?? "";
+  const isTestKey = stripeKey.startsWith("sk_test_");
+  const enabled = nodeEnv === "development" || isTestKey;
   return NextResponse.json({ enabled });
 }

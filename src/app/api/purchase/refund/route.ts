@@ -4,6 +4,7 @@ import { createRefundForPurchase } from "@/services/refund.service";
 
 /**
  * Request a refund for a bundle the authenticated user purchased.
+ * Not exposed in the app UI; the 7-day refund window is enforced here server-side so it cannot be bypassed by calling the API directly.
  * For Connect destination charges, the creator's share is reversed and the platform
  * fee is refunded; the customer is refunded. The webhook charge.refunded revokes access.
  */
@@ -41,6 +42,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "not_found", message: "You have not purchased this bundle" },
         { status: 404 }
+      );
+    }
+    if (message.includes("Refund window has closed")) {
+      return NextResponse.json(
+        { error: "refund_window_closed", message },
+        { status: 403 }
       );
     }
     if (message.includes("cannot be refunded") || message.includes("No charge found")) {

@@ -17,10 +17,13 @@ function getRestockingFeeCents(chargeAmountCents: number): number {
   return Math.min(Math.max(0, fee), chargeAmountCents - 1);
 }
 
+/** Refund allowed only within this many days after purchase. */
+const REFUND_WINDOW_DAYS = parseInt(process.env.STRIPE_REFUND_WINDOW_DAYS ?? "7", 10) || 7;
+
 /**
  * Create a refund for a purchase, minus a restocking fee so the platform doesn't absorb Stripe's non-refunded processing fee.
- * The customer receives (charge amount − restocking fee). For Connect destination charges, sets
- * reverse_transfer=true and refund_application_fee=true (proportional to the refund amount).
+ * Refunds are only allowed within REFUND_WINDOW_DAYS (default 7) of the purchase — enforced server-side so it cannot be bypassed.
+ * For Connect destination charges, sets reverse_transfer=true and refund_application_fee=true (proportional to the refund amount).
  * Access is revoked immediately after the refund is created.
  */
 export async function createRefundForPurchase(
@@ -32,6 +35,16 @@ export async function createRefundForPurchase(
   if (!entitlement) {
     throw new Error("No purchase found for this user and bundle");
   }
+
+  const purchasedAt = new Date(entitlement.purchased_at).getTime();
+  const now = Date.now();
+  const windowMs = REFUND_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  if (now - purchasedAt > windowMs) {
+    throw new Error(
+      `Refund window has closed. Refunds are only available within ${REFUND_WINDOW_DAYS} days of purchase.`
+    );
+  }
+
   const paymentIntentId = entitlement.stripe_payment_intent_id;
   if (!paymentIntentId) {
     throw new Error(

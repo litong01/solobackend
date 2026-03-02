@@ -489,7 +489,8 @@ paths:
       tags: [Purchase]
       summary: Request refund for a purchased bundle
       description: |
-        Refunds the authenticated user's purchase of the given bundle. For Connect destination
+        Refunds the authenticated user's purchase of the given bundle. Allowed only within
+        7 days of purchase (configurable via STRIPE_REFUND_WINDOW_DAYS). For Connect destination
         charges, the refund uses reverse_transfer and refund_application_fee so the creator's
         share and platform fee are reversed; the customer is refunded. Access is revoked when
         Stripe sends charge.refunded.
@@ -531,6 +532,15 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "403":
+          description: Refund window closed (purchase older than allowed days)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string, example: refund_window_closed }
+                  message: { type: string }
         "500":
           $ref: "#/components/responses/ServerError"
 

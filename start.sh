@@ -19,11 +19,7 @@ ensure_network() {
 
 do_build() {
   echo "Building solobackend image..."
-  build_args=""
-  if [ -f .env.local ] && grep -q "^ENABLE_SWAGGER_UI=true" .env.local; then
-    build_args="--build-arg ENABLE_SWAGGER_UI=true"
-  fi
-  docker build $build_args -t solobackend .
+  docker build -t solobackend .
   echo "Done."
 }
 
