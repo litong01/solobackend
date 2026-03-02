@@ -1,10 +1,16 @@
 import { getStripe } from "@/lib/stripe";
 import { Bundle } from "@/types/api";
 
+function isValidEmail(value: string | null | undefined): boolean {
+  if (value == null || typeof value !== "string") return false;
+  const trimmed = value.trim();
+  return trimmed.length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+}
+
 export async function createCheckoutSession(
   bundle: Bundle,
   userId: string,
-  userEmail: string
+  userEmail: string | null | undefined
 ): Promise<string> {
   const stripe = getStripe();
 
@@ -13,7 +19,7 @@ export async function createCheckoutSession(
   const session = await stripe.checkout.sessions.create({
     payment_method_types: ["card"],
     mode: "payment",
-    customer_email: userEmail,
+    ...(isValidEmail(userEmail) && { customer_email: userEmail!.trim() }),
     line_items: [
       {
         price_data: {
@@ -31,7 +37,7 @@ export async function createCheckoutSession(
       user_id: userId,
       bundle_id: bundle.id,
     },
-    success_url: `${siteUrl}/library?purchase=success&bundle=${bundle.id}`,
+    success_url: `${siteUrl}/library?purchase=success&bundle=${bundle.id}&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${siteUrl}/bundles/${bundle.id}?purchase=cancelled`,
   });
 

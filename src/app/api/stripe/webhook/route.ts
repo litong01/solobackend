@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { createEntitlement } from "@/services/entitlement.service";
+import { removeSavedOnPurchase } from "@/services/collection.service";
 import { findOrCreateUser } from "@/services/user.service";
 
 export async function POST(request: NextRequest) {
@@ -47,6 +48,7 @@ export async function POST(request: NextRequest) {
     try {
       await findOrCreateUser(userId, session.customer_email || "");
       await createEntitlement(userId, bundleId);
+      await removeSavedOnPurchase(userId, bundleId);
       console.log(`Entitlement created: user=${userId} bundle=${bundleId}`);
     } catch (err) {
       console.error("Error processing webhook:", err);

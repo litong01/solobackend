@@ -1,9 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/use-auth";
 
+function navLinkClass(pathname: string, href: string, matchStartsWith = false): string {
+  const isActive = matchStartsWith
+    ? pathname === href || pathname.startsWith(href + "/")
+    : pathname === href;
+  return isActive
+    ? "font-semibold text-brand-600"
+    : "text-gray-600 hover:text-gray-900 transition-colors";
+}
+
 export function Header() {
+  const pathname = usePathname();
   const { isAuthenticated, isLoading, user, login, logout } = useAuth();
 
   return (
@@ -16,9 +27,9 @@ export function Header() {
         <nav className="flex items-center gap-6 text-sm">
           <Link
             href="/"
-            className="text-gray-600 hover:text-gray-900 transition-colors"
+            className={navLinkClass(pathname, "/")}
           >
-            Browse
+            Explore
           </Link>
 
           {isLoading ? (
@@ -27,9 +38,15 @@ export function Header() {
             <>
               <Link
                 href="/library"
-                className="text-gray-600 hover:text-gray-900 transition-colors"
+                className={navLinkClass(pathname, "/library")}
               >
-                My Library
+                My Collection
+              </Link>
+              <Link
+                href="/my-bundles"
+                className={navLinkClass(pathname, "/my-bundles", true)}
+              >
+                My Bundles
               </Link>
               <span className="text-gray-400">{user?.email}</span>
               <button

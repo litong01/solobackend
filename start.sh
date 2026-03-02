@@ -19,7 +19,11 @@ ensure_network() {
 
 do_build() {
   echo "Building solobackend image..."
-  docker build -t solobackend .
+  build_args=""
+  if [ -f .env.local ] && grep -q "^ENABLE_SWAGGER_UI=true" .env.local; then
+    build_args="--build-arg ENABLE_SWAGGER_UI=true"
+  fi
+  docker build $build_args -t solobackend .
   echo "Done."
 }
 
@@ -35,6 +39,7 @@ do_up() {
   docker run -d --name solobackend-db \
     --network soloband \
     -p 5432:5432 \
+    -v solobackend-db-data:/var/lib/postgresql/data \
     -e POSTGRES_USER=tongli \
     -e POSTGRES_PASSWORD=jietao \
     -e POSTGRES_DB=solobackend \

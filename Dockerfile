@@ -16,6 +16,10 @@ COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Pass at build time so Next.js can inline: docker build --build-arg ENABLE_SWAGGER_UI=true
+ARG ENABLE_SWAGGER_UI
+ENV ENABLE_SWAGGER_UI=$ENABLE_SWAGGER_UI
+
 RUN npm run build
 
 # ------- Production -------
@@ -31,9 +35,13 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/openapi.yaml ./openapi.yaml
+COPY --from=builder /app/openapi.json ./openapi.json
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+RUN chown nextjs:nodejs /app/openapi.yaml /app/openapi.json
 
 USER nextjs
 

@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { bundle_id } = body;
+    const { bundle_id, email: bodyEmail } = body;
 
     if (!bundle_id) {
       return NextResponse.json(
@@ -29,10 +29,12 @@ export async function POST(request: NextRequest) {
 
     await findOrCreateUser(auth.id, auth.email);
 
-    const checkoutUrl = await createCheckoutSession(bundle, auth.id, auth.email);
+    const email = bodyEmail ?? auth.email;
+    const checkoutUrl = await createCheckoutSession(bundle, auth.id, email);
     return NextResponse.json({ data: { checkout_url: checkoutUrl } });
   } catch (err) {
-    console.error("Error creating checkout session:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("Error creating checkout session:", message, err);
     return NextResponse.json(
       { error: "server_error", message: "Failed to create checkout session" },
       { status: 500 }

@@ -1,5 +1,8 @@
 import { getBundleById, getBundleMetadata } from "@/services/bundle.service";
 import { PurchaseButton } from "@/components/PurchaseButton";
+import { DownloadButton } from "@/components/DownloadButton";
+import { DeleteBundleButton } from "@/components/DeleteBundleButton";
+import { CollectionButton } from "@/components/CollectionButton";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
@@ -87,6 +90,14 @@ export default async function BundleDetailPage({
               {bundle.description}
             </p>
 
+            {bundle.category && (
+              <div className="mt-6 space-y-3">
+                <p className="text-sm text-gray-500">
+                  <span className="font-medium text-gray-700">Category:</span>{" "}
+                  {bundle.category}
+                </p>
+              </div>
+            )}
             {metadata && (
               <div className="mt-6 space-y-3">
                 {metadata.composer && (
@@ -123,13 +134,51 @@ export default async function BundleDetailPage({
               </span>
             </div>
 
-            <PurchaseButton bundleId={bundle.id} />
+            <PurchaseButton
+              bundleId={bundle.id}
+              createdByUserId={bundle.created_by_user_id}
+            />
+
+            <CollectionButton
+              bundleId={bundle.id}
+              createdByUserId={bundle.created_by_user_id}
+            />
+
+            {(bundle.r2_key || metadata?.files?.length) && (
+              <div className="mt-6">
+                <DownloadButton bundleId={bundle.id} />
+              </div>
+            )}
+
+            {bundle.created_by_user_id && (
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link
+                  href={`/my-bundles/${bundle.id}/edit`}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Edit bundle
+                </Link>
+                <DeleteBundleButton
+                  bundleId={bundle.id}
+                  bundleTitle={bundle.title}
+                  createdByUserId={bundle.created_by_user_id}
+                  redirectOnSuccess="/my-bundles"
+                  variant="detail"
+                />
+              </div>
+            )}
 
             <div className="mt-6">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
                 Included Files
               </h3>
-              {metadata?.files ? (
+              {bundle.r2_key ? (
+                <ul className="mt-3 space-y-2">
+                  <li className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                    <span className="font-medium text-gray-700">Compressed bundle</span>
+                  </li>
+                </ul>
+              ) : metadata?.files ? (
                 <ul className="mt-3 space-y-2">
                   {metadata.files.map((file) => (
                     <li

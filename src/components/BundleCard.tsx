@@ -41,7 +41,7 @@ export function BundleCard({ bundle }: { bundle: Bundle }) {
             {formatPrice(bundle.price)}
           </span>
           <span className="text-xs text-gray-400 uppercase tracking-wide">
-            PDF + MusicXML + JSON
+            {bundle.category || "PDF + MusicXML + JSON"}
           </span>
         </div>
       </div>

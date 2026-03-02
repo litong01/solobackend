@@ -1,0 +1,651 @@
+openapi: 3.0.3
+info:
+  title: SoloBackend API
+  description: |
+    API for the SoloBackend digital music bundle store. Used by the web app and
+    mobile clients (e.g. Soloband). Authentication uses Kinde JWT; send it as
+    `Authorization: Bearer <access_token>` for protected endpoints.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+  - url: https://your-production-domain.com
+    description: Production (replace with your base URL)
+
+tags:
+  - name: Health
+    description: Health check
+  - name: Bundles
+    description: Browse and manage bundles
+  - name: Entitlements
+    description: User's purchased and owned bundles
+  - name: Collection
+    description: My Collection (purchased + owned + saved)
+  - name: Purchase
+    description: Checkout and payments
+  - name: My Bundles
+    description: Bundles created by the user
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Returns service status. No authentication required.
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, timestamp]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /api/bundles:
+    get:
+      tags: [Bundles]
+      summary: List all bundles
+      description: Returns all bundles (e.g. for Explore). No auth required.
+      security: []
+      responses:
+        "200":
+          description: List of bundles
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Bundle" }
+        "500":
+          $ref: "#/components/responses/ServerError"
+    post:
+      tags: [Bundles]
+      summary: Create a bundle
+      description: Create a new bundle and upload a zip file. Creator is the authenticated user.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [title, description, price, file]
+              properties:
+                title:
+                  type: string
+                  description: Bundle title
+                description:
+                  type: string
+                  description: Bundle description
+                price:
+                  type: number
+                  minimum: 0
+                  description: Price in USD
+                category:
+                  type: string
+                  description: Optional category
+                file:
+                  type: string
+                  format: binary
+                  description: Bundle zip file (required)
+      responses:
+        "200":
+          description: Created bundle
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Bundle" }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/bundles/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Bundle ID
+    get:
+      tags: [Bundles]
+      summary: Get bundle details
+      description: Returns bundle with optional metadata. No auth required.
+      security: []
+      responses:
+        "200":
+          description: Bundle with metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/BundleDetail" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    patch:
+      tags: [Bundles]
+      summary: Update a bundle
+      description: Update bundle fields and/or replace the bundle file. Only the creator can update.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                description: { type: string }
+                price:
+                  type: number
+                  minimum: 0
+                category: { type: string }
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                description: { type: string }
+                price:
+                  type: number
+                  minimum: 0
+                category: { type: string }
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Updated bundle
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: "#/components/schemas/Bundle" }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    delete:
+      tags: [Bundles]
+      summary: Delete a bundle
+      description: Delete a bundle. Only the creator can delete, and only if it has no purchases.
+      responses:
+        "200":
+          description: Bundle deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      deleted:
+                        type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Bundle has purchases; cannot delete
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                error: cannot_delete
+                message: "Cannot delete a bundle that has been purchased. Remove or refund purchases first."
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/bundles/{id}/download:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Bundle ID
+      - name: expires_in
+        in: query
+        schema:
+          type: integer
+          minimum: 60
+          maximum: 3600
+          default: 300
+        description: Presigned URL validity in seconds (60–3600). Default 300.
+    get:
+      tags: [Bundles]
+      summary: Get download URL (presigned R2)
+      description: |
+        Returns a time-limited presigned URL to download the bundle from R2.
+        Access is allowed if the user has the bundle in their collection (purchased, owned, or saved).
+        The client uses the returned `download_url` to fetch the file; visibility of content
+        (full vs partial) is determined by the bundle's internal metadata and the user's
+        relationship (purchased/owned/saved) in the client app.
+      responses:
+        "200":
+          description: Download URL and metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/DownloadResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: Download not available (e.g. no bundle file uploaded)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/entitlements:
+    get:
+      tags: [Entitlements]
+      summary: List user's entitlements
+      description: |
+        Returns bundles the user can access by purchase or ownership (created by user).
+        Used by the Soloband app. Each item includes full bundle data. For owned-only
+        bundles (no purchase), the entitlement id is prefixed with `owned-`.
+      responses:
+        "200":
+          description: List of entitlements with bundle
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/EntitlementWithBundle" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/collection:
+    get:
+      tags: [Collection]
+      summary: Get My Collection
+      description: |
+        Returns the merged collection: purchased + owned + saved bundles, deduplicated.
+        Each item has `type` (purchased | owned | saved), `purchased`, and `unlocked`.
+        Use `unlocked` with the bundle's internal lock metadata to control full vs partial content.
+      responses:
+        "200":
+          description: Collection items
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/CollectionItem" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    post:
+      tags: [Collection]
+      summary: Add bundle to collection
+      description: Add a bundle to the user's collection (saved). Idempotent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bundle_id]
+              properties:
+                bundle_id:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Added
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      added:
+                        type: boolean
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/collection/check:
+    get:
+      tags: [Collection]
+      summary: Check if bundle is in collection (saved)
+      parameters:
+        - name: bundle_id
+          in: query
+          required: true
+          schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Saved status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [saved]
+                    properties:
+                      saved: { type: boolean }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/collection/{bundleId}:
+    parameters:
+      - name: bundleId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags: [Collection]
+      summary: Remove bundle from collection
+      description: Remove a bundle from the user's saved collection.
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      removed:
+                        type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/purchase/create-checkout-session:
+    post:
+      tags: [Purchase]
+      summary: Create Stripe Checkout session
+      description: Creates a Stripe Checkout session for the given bundle. Redirect the user to the returned `checkout_url`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bundle_id]
+              properties:
+                bundle_id:
+                  type: string
+                  format: uuid
+                email:
+                  type: string
+                  format: email
+                  description: Optional; used if JWT has no email claim
+      responses:
+        "200":
+          description: Checkout URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [checkout_url]
+                    properties:
+                      checkout_url:
+                        type: string
+                        format: uri
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/my-bundles:
+    get:
+      tags: [My Bundles]
+      summary: List my bundles
+      description: Returns bundles created by the authenticated user.
+      responses:
+        "200":
+          description: List of bundles created by the user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Bundle" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Kinde access token (JWT)
+
+  schemas:
+    Bundle:
+      type: object
+      required: [id, title, description, price, category, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title: { type: string }
+        description: { type: string }
+        price: { type: number }
+        category: { type: string }
+        metadata_url:
+          type: string
+          format: uri
+          nullable: true
+        r2_key:
+          type: string
+          nullable: true
+        created_by_user_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    BundleDetail:
+      allOf:
+        - { $ref: "#/components/schemas/Bundle" }
+        - type: object
+          properties:
+            metadata:
+              nullable: true
+              $ref: "#/components/schemas/BundleMetadata"
+
+    BundleMetadata:
+      type: object
+      properties:
+        files:
+          type: array
+          items: { $ref: "#/components/schemas/BundleFile" }
+        preview_image: { type: string }
+        composer: { type: string }
+        genre: { type: string }
+        difficulty: { type: string }
+
+    BundleFile:
+      type: object
+      required: [key, filename, type, size_bytes]
+      properties:
+        key: { type: string }
+        filename: { type: string }
+        type:
+          type: string
+          enum: [pdf, musicxml, json]
+        size_bytes: { type: integer }
+
+    EntitlementWithBundle:
+      type: object
+      required: [id, user_id, bundle_id, purchased_at, bundle]
+      properties:
+        id: { type: string }
+        user_id: { type: string }
+        bundle_id: { type: string }
+        purchased_at:
+          type: string
+          format: date-time
+        bundle: { $ref: "#/components/schemas/Bundle" }
+
+    CollectionItem:
+      type: object
+      required: [bundle, type, purchased, unlocked]
+      properties:
+        bundle: { $ref: "#/components/schemas/Bundle" }
+        type:
+          type: string
+          enum: [purchased, owned, saved]
+        purchased:
+          type: boolean
+          description: True if user has purchased this bundle
+        unlocked:
+          type: boolean
+          description: True if user has full access (purchased or created); use with bundle lock metadata for full vs partial content
+        purchased_at:
+          type: string
+          format: date-time
+        added_at:
+          type: string
+          format: date-time
+
+    DownloadResponse:
+      type: object
+      required: [download_url, filename, expires_in]
+      properties:
+        download_url:
+          type: string
+          format: uri
+          description: Presigned R2 URL; use in a GET request to fetch the file
+        filename: { type: string }
+        expires_in:
+          type: integer
+          description: URL validity in seconds
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        message: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid Authorization header (Bearer token)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: unauthorized
+            message: Invalid or expired token
+    Forbidden:
+      description: Authenticated but not allowed to perform the action
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: not_found
+            message: Bundle not found
+    ValidationError:
+      description: Invalid request (validation failed)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            error: validation
+            message: title is required
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

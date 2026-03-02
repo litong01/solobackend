@@ -1,0 +1,29 @@
+---
+description: Keep OpenAPI spec in sync whenever API routes or types change
+globs: src/app/api/**/*.ts,src/types/api.ts,openapi.yaml
+alwaysApply: false
+---
+
+# Keep OpenAPI spec in sync with the API
+
+Whenever you **add, change, or remove** an API endpoint or shared request/response types, you **must** update or verify **`openapi.yaml`** so the spec does not become outdated.
+
+## When to update `openapi.yaml`
+
+- **New route** (e.g. new file under `src/app/api/`): Add the path, method, summary, request/response schemas, and auth (if any) to `openapi.yaml`.
+- **Changed route**: Update the corresponding path in `openapi.yaml` (parameters, body, responses, description).
+- **Removed route**: Remove the path (and any now-unused component schemas) from `openapi.yaml`.
+- **Changed types** in `src/types/api.ts` that are used by API responses or requests: Update the matching `components/schemas` and any path that references them.
+
+## What to keep in sync
+
+- **Paths**: Every `src/app/api/**/route.ts` that is part of the public API should have a matching path in `openapi.yaml` (exclude internal endpoints like Stripe webhook or dev-only routes if they are not documented).
+- **Methods**: GET, POST, PATCH, DELETE, etc. must match.
+- **Auth**: Use `security: []` for no auth; otherwise the path uses the global `BearerAuth`.
+- **Request**: Query params, path params, and body (JSON or multipart) with correct schema.
+- **Response**: Success (200) and error (400, 401, 403, 404, 500) response bodies; use `components/schemas` for shared shapes (e.g. `Bundle`, `CollectionItem`, `DownloadResponse`, `Error`).
+
+## Verification
+
+- After editing `openapi.yaml`, optionally run a quick sanity check: open `/api-docs` (if Swagger UI is enabled) and confirm the changed endpoint appears and the request/response shapes look correct.
+- Keep `openapi.yaml` as the single source of truth for the public API; client code and README API tables should align with it.

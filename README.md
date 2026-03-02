@@ -28,6 +28,8 @@ A single-container full-stack application for selling digital music bundles (PDF
 
 **Download:** User clicks Download → API route verifies JWT, checks entitlement → generates a 5-minute pre-signed R2 URL → returns URL to browser.
 
+**Mobile app (Soloband) — bundle access URL:** Use the same download endpoint with the user’s access token. Call `GET /api/bundles/:id/download` with `Authorization: Bearer <access_token>`. The server verifies the token, checks access (purchased or created), and returns a time-limited presigned R2 URL. The app then uses that URL to fetch the bundle file from R2 (no auth on the URL). Optional: `?expires_in=3600` to request a longer-lived URL (60–3600 seconds; default 300). Response: `{ "data": { "download_url": "<presigned R2 URL>", "filename": "bundle.zip", "expires_in": 300 } }`.
+
 ---
 
 ## Required External Services
@@ -76,6 +78,30 @@ The CLI prints a signing secret like `whsec_...` — use that as `STRIPE_WEBHOOK
 
 Both values are server-only (never exposed to the browser).
 
+**Stripe test cards (test mode only)**
+
+When testing checkout in Stripe's test/sandbox mode, use these test card numbers. Use **any future expiry** (e.g. `12/34`), **any 3-digit CVC** (e.g. `123`), and any billing ZIP.
+
+| Result | Card number |
+|--------|-------------|
+| **Success — Visa** | `4242 4242 4242 4242` |
+| **Success — Mastercard** | `5555 5555 5555 4444` |
+| **Success — American Express** | `3782 822463 10005` |
+| **Declined (generic)** | `4000 0000 0000 0002` |
+| **Declined (insufficient funds)** | `4000 0000 0000 9995` |
+| **Declined (expired card)** | `4000 0000 0000 0069` |
+
+For a quick successful test, use **4242 4242 4242 4242** with any future expiry and any CVC. Never use test cards in live mode.
+
+**Redirect back to your app after payment**
+
+Stripe redirects the customer to the `success_url` you pass when creating the Checkout session (and to `cancel_url` if they cancel). That URL is built from `NEXT_PUBLIC_SITE_URL` in your env (default `http://localhost:3000`).
+
+- **Use the same URL you use to open the app.** If you open the app at `http://localhost:3000`, keep `NEXT_PUBLIC_SITE_URL=http://localhost:3000`. If you use a tunnel (e.g. ngrok) or another host/port, set `NEXT_PUBLIC_SITE_URL` to that base URL (e.g. `https://abc123.ngrok.io`) so Stripe redirects the browser back to a page that loads.
+- **Rebuild/restart after changing env.** If you change `.env.local`, restart the app (e.g. `./start.sh down && ./start.sh up` or rebuild the image with `./start.sh build`).
+
+If redirect still doesn’t happen, check the Stripe Dashboard → **Settings → Checkout** (or **Branding**) for any “Customer success page” or redirect override.
+
 ### Cloudflare R2 (File Storage)
 
 R2 stores the bundle files (PDFs, MusicXML, JSON) privately. The server generates short-lived signed URLs so users can download files without the bucket being public.
@@ -85,9 +111,20 @@ R2 stores the bundle files (PDFs, MusicXML, JSON) privately. The server generate
 | `CLOUDFLARE_R2_ACCOUNT_ID` | Your Cloudflare account identifier | Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com). Your Account ID is visible in the URL bar (`dash.cloudflare.com/<account_id>`) or on the R2 overview page. |
 | `CLOUDFLARE_R2_ACCESS_KEY` | S3-compatible access key ID | In the Cloudflare Dashboard, go to **R2 → Manage R2 API Tokens → Create API Token**. Choose "Object Read & Write" permissions. After creating the token, the **Access Key ID** is displayed. |
 | `CLOUDFLARE_R2_SECRET_KEY` | S3-compatible secret access key | Shown **once** on the same page when you create the API token. Copy it immediately. If you lose it, create a new token. |
-| `CLOUDFLARE_R2_BUCKET` | The bucket name | Go to **R2 → Create Bucket**. Choose a name (e.g., `music-bundles`). Use that name here. |
+| `CLOUDFLARE_R2_BUCKET` | The bucket name | Go to **R2 → Create Bucket**. Use a single bucket for all bundles (e.g. `solobankdbooks`). User-created bundles are stored under keys `bundles/YYYYMM/{bundle_id}.zip`; seed bundles can use keys under `bundles/...`. |
+
+If you see **AccessDenied** when creating a bundle (upload to R2), check:
+
+1. **API token permissions** – The token must allow **Object Read & Write**. In Cloudflare: **R2 → Manage R2 API Tokens**. Edit or create a token and ensure it has **Object Read & Write** (not just Read). If it still fails, try **Admin Read & Write** for that token.
+2. **Token scope** – When creating the token, choose **Apply to all buckets** (or ensure your bucket is in the “Apply to specific buckets” list). The bucket name is case-sensitive.
+3. **Bucket name** – `CLOUDFLARE_R2_BUCKET` must match the bucket name exactly (e.g. `solobankdbooks`). The bucket must already exist in the same account.
+4. **Credentials in the container** – The app runs with `--env-file .env.local`. Ensure `CLOUDFLARE_R2_ACCOUNT_ID`, `CLOUDFLARE_R2_ACCESS_KEY`, `CLOUDFLARE_R2_SECRET_KEY`, and `CLOUDFLARE_R2_BUCKET` are set in `.env.local` with no typos or extra spaces. After changing `.env.local`, restart the app: `./start.sh down && ./start.sh up`.
+
+The app uses **path-style** requests for R2 (`forcePathStyle: true`), which R2’s S3 API often requires.
 
 All four values are server-only.
+
+**Downloads and seed bundles:** The seed data references metadata keys (e.g. `bundles/bach-cello-suite-1/metadata.json`). For **Download** to work, those keys (and the actual files they reference) must exist in your R2 bucket. If they don’t, the app still runs and shows bundles; only the Download action will show “Download is not available for this bundle yet.” Upload the `metadata.json` and bundle files to R2 as in the [R2 File Layout](#r2-file-layout) section to enable downloads.
 
 ### PostgreSQL (Database)
 
@@ -283,15 +320,27 @@ solobackend/
 
 ## API Endpoints
 
+A full **OpenAPI 3.0** specification is in the repo root: **`openapi.yaml`**. Use it to generate client SDKs, validate requests, or view in Swagger UI (e.g. [Swagger Editor](https://editor.swagger.io/) or `npx @redocly/cli preview openapi.yaml`).
+
+**Swagger UI in the app:** In **development** (`npm run dev`) or when Swagger is enabled, open **`/api-docs`** in the browser. The spec is served at `GET /api/openapi` (JSON). **Docker:** Add `ENABLE_SWAGGER_UI=true` to `.env.local`, then run `./start.sh build` (the script passes it as a build-arg so the app is built with Swagger on) and `./start.sh up`.
+
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/api/health` | No | Health check |
 | GET | `/api/bundles` | No | List all bundles |
+| POST | `/api/bundles` | Bearer | Create bundle (multipart form: title, description, price, category, file) |
 | GET | `/api/bundles/:id` | No | Bundle details + metadata |
-| GET | `/api/entitlements` | Bearer | User's purchased bundles |
+| PATCH | `/api/bundles/:id` | Bearer | Update bundle (creator only) |
+| DELETE | `/api/bundles/:id` | Bearer | Delete bundle (creator only; no purchases) |
+| GET | `/api/bundles/:id/download` | Bearer | Get presigned R2 download URL (optional `?expires_in=60–3600`) |
+| GET | `/api/entitlements` | Bearer | User's purchased + owned bundles |
+| GET | `/api/collection` | Bearer | My Collection (purchased + owned + saved, deduplicated) |
+| POST | `/api/collection` | Bearer | Add bundle to collection |
+| GET | `/api/collection/check?bundle_id=` | Bearer | Check if bundle is saved in collection |
+| DELETE | `/api/collection/:bundleId` | Bearer | Remove bundle from collection |
 | POST | `/api/purchase/create-checkout-session` | Bearer | Create Stripe Checkout session |
-| POST | `/api/stripe/webhook` | Stripe sig | Handle purchase confirmation |
-| GET | `/api/bundles/:id/download` | Bearer | Get signed download URL |
+| GET | `/api/my-bundles` | Bearer | Bundles created by the user |
+| POST | `/api/stripe/webhook` | Stripe sig | Handle purchase confirmation (internal) |
 
 ## Database Schema
 
@@ -322,7 +371,21 @@ CREATE TABLE entitlements (
 
 ## R2 File Layout
 
-Each bundle has a folder in R2 with a `metadata.json` describing its files:
+A single R2 bucket (e.g. `solobankdbooks`) holds all bundle files. Set `CLOUDFLARE_R2_BUCKET` to that bucket name.
+
+**User-created bundles** are a single compressed file per bundle. Keys are organized by **upload month** for scalability (e.g. `bundles/202603/{bundle_id}.zip`). Ownership and metadata (title, description, category) are stored in Postgres; R2 only stores the file.
+
+```
+bundles/
+  202601/
+    <bundle-uuid>.zip
+  202602/
+    <bundle-uuid>.zip
+  202603/
+    <bundle-uuid>.zip
+```
+
+**Seed / legacy bundles** (optional) use keys under `bundles/` with a `metadata.json` and multiple files:
 
 ```
 bundles/
@@ -333,7 +396,7 @@ bundles/
     analysis.json
 ```
 
-Example `metadata.json`:
+Example `metadata.json` (for legacy seed bundles only):
 
 ```json
 {

@@ -1,6 +1,7 @@
 import type {
   Bundle,
   BundleDetail,
+  CollectionItem,
   CreateCheckoutSessionResponse,
   DownloadResponse,
   EntitlementWithBundle,
@@ -55,13 +56,110 @@ export async function fetchEntitlements(token: string): Promise<EntitlementWithB
   return res.data;
 }
 
-export async function createCheckoutSession(
+export async function fetchCollection(token: string): Promise<CollectionItem[]> {
+  const res = await apiFetch<ApiResponse<CollectionItem[]>>(
+    "/api/collection",
+    {},
+    token
+  );
+  return res.data;
+}
+
+export async function checkCollectionStatus(
   bundleId: string,
   token: string
+): Promise<{ saved: boolean }> {
+  const res = await apiFetch<ApiResponse<{ saved: boolean }>>(
+    `/api/collection/check?bundle_id=${encodeURIComponent(bundleId)}`,
+    {},
+    token
+  );
+  return res.data;
+}
+
+export async function addToCollection(bundleId: string, token: string): Promise<void> {
+  await apiFetch(
+    "/api/collection",
+    {
+      method: "POST",
+      body: JSON.stringify({ bundle_id: bundleId }),
+    },
+    token
+  );
+}
+
+export async function removeFromCollection(
+  bundleId: string,
+  token: string
+): Promise<void> {
+  const res = await fetch(`/api/collection/${bundleId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ message: "Request failed" }));
+    throw new Error(body.message || `API error: ${res.status}`);
+  }
+}
+
+export async function fetchMyBundles(token: string): Promise<Bundle[]> {
+  const res = await apiFetch<ApiResponse<Bundle[]>>("/api/my-bundles", {}, token);
+  return res.data;
+}
+
+export interface CreateBundleParams {
+  title: string;
+  description: string;
+  price: number;
+  category: string;
+  file?: File | null;
+}
+
+export async function createBundle(
+  token: string,
+  params: CreateBundleParams
+): Promise<Bundle> {
+  const formData = new FormData();
+  formData.set("title", params.title);
+  formData.set("description", params.description);
+  formData.set("price", String(params.price));
+  formData.set("category", params.category ?? "");
+  if (params.file) {
+    formData.set("file", params.file);
+  }
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  };
+
+  const res = await fetch("/api/bundles", {
+    method: "POST",
+    headers,
+    body: formData,
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ message: "Request failed" }));
+    throw new Error(error.message || `API error: ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.data;
+}
+
+export async function createCheckoutSession(
+  bundleId: string,
+  token: string,
+  email?: string | null
 ): Promise<string> {
   const res = await apiFetch<ApiResponse<CreateCheckoutSessionResponse>>(
     "/api/purchase/create-checkout-session",
-    { method: "POST", body: JSON.stringify({ bundle_id: bundleId }) },
+    {
+      method: "POST",
+      body: JSON.stringify({ bundle_id: bundleId, ...(email && { email }) }),
+    },
     token
   );
   return res.data.checkout_url;
@@ -79,4 +177,72 @@ export async function fetchDownloadUrl(
     token
   );
   return res.data;
+}
+
+export async function deleteBundle(bundleId: string, token: string): Promise<void> {
+  const res = await fetch(`/api/bundles/${bundleId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ message: "Request failed" }));
+    throw new Error(body.message || `API error: ${res.status}`);
+  }
+}
+
+export interface UpdateBundleParams {
+  title?: string;
+  description?: string;
+  price?: number;
+  category?: string;
+  file?: File | null;
+}
+
+export async function updateBundle(
+  bundleId: string,
+  token: string,
+  params: UpdateBundleParams
+): Promise<Bundle> {
+  const hasFile = params.file && params.file.size > 0;
+  if (hasFile) {
+    const formData = new FormData();
+    formData.set("title", params.title ?? "");
+    formData.set("description", params.description ?? "");
+    formData.set("price", String(params.price ?? ""));
+    formData.set("category", params.category ?? "");
+    formData.set("file", params.file!);
+    const res = await fetch(`/api/bundles/${bundleId}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ message: "Request failed" }));
+      throw new Error(body.message || `API error: ${res.status}`);
+    }
+    const data = await res.json();
+    return data.data;
+  }
+  const res = await fetch(`/api/bundles/${bundleId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      ...(params.title !== undefined && { title: params.title }),
+      ...(params.description !== undefined && { description: params.description }),
+      ...(params.price !== undefined && { price: params.price }),
+      ...(params.category !== undefined && { category: params.category }),
+    }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ message: "Request failed" }));
+    throw new Error(body.message || `API error: ${res.status}`);
+  }
+  const data = await res.json();
+  return data.data;
 }

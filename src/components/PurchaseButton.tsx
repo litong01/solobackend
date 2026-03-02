@@ -4,10 +4,20 @@ import { useState } from "react";
 import { useAuth } from "@/lib/use-auth";
 import { createCheckoutSession } from "@/lib/api-client";
 
-export function PurchaseButton({ bundleId }: { bundleId: string }) {
-  const { isAuthenticated, login, getToken } = useAuth();
+export function PurchaseButton({
+  bundleId,
+  createdByUserId,
+}: {
+  bundleId: string;
+  /** When the current user is the creator, the button is shown but disabled. */
+  createdByUserId?: string | null;
+}) {
+  const { isAuthenticated, user, login, getToken } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isOwner =
+    createdByUserId != null && user?.id != null && user.id === createdByUserId;
 
   if (!isAuthenticated) {
     return (
@@ -20,13 +30,26 @@ export function PurchaseButton({ bundleId }: { bundleId: string }) {
     );
   }
 
+  if (isOwner) {
+    return (
+      <button
+        type="button"
+        disabled
+        className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-lg bg-gray-200 px-6 py-3 text-base font-semibold text-gray-500"
+        title="You own this bundle"
+      >
+        Purchase Bundle
+      </button>
+    );
+  }
+
   async function handlePurchase() {
     setLoading(true);
     setError(null);
     try {
       const token = await getToken();
       if (!token) throw new Error("Not authenticated");
-      const url = await createCheckoutSession(bundleId, token);
+      const url = await createCheckoutSession(bundleId, token, user?.email ?? undefined);
       window.location.href = url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Purchase failed");
