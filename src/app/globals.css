@@ -6,4 +6,14 @@
   body {
     @apply bg-gray-50 text-gray-900 antialiased;
   }
+  /* No gray box behind logo icons; match header/footer so any matte blends in */
+  img.site-logo-img {
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+  header img.site-logo-img,
+  footer img.site-logo-img {
+    background: white !important;
+    background-color: white !important;
+  }
 }

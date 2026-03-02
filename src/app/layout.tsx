@@ -5,7 +5,7 @@ import { Header } from "@/components/Header";
 import { AuthProvider } from "@/components/AuthProvider";
 
 export const metadata: Metadata = {
-  title: "SoloBackend — Digital Music Bundles",
+  title: "MySoloband — Digital Music Bundles",
   description:
     "Purchase and download professional music scores in PDF, MusicXML, and JSON formats.",
 };
@@ -31,8 +31,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Header />
           <main className="flex-1">{children}</main>
           <footer className="border-t border-gray-200 bg-white py-8 mt-12">
-            <div className="mx-auto max-w-6xl px-4 text-center text-sm text-gray-500">
-              &copy; {new Date().getFullYear()} SoloBackend. All rights reserved.
+            <div className="mx-auto flex max-w-6xl items-center justify-center gap-2 px-4 text-center text-sm text-gray-500">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/com-icon.PNG"
+                alt="tempoaide"
+                width={32}
+                height={32}
+                className="site-logo-img h-8 w-8 shrink-0 object-contain"
+              />
+              &copy; {new Date().getFullYear()} tempoaide. All rights reserved.
             </div>
           </footer>
         </AuthProvider>

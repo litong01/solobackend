@@ -20,8 +20,16 @@ export function Header() {
   return (
     <header className="border-b border-gray-200 bg-white">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-        <Link href="/" className="text-xl font-bold text-brand-700">
-          SoloBackend
+        <Link href="/" className="flex items-center gap-2 text-xl font-bold text-brand-700">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/app-icon.PNG"
+            alt="MySoloband"
+            width={48}
+            height={48}
+            className="site-logo-img h-12 w-12 shrink-0 object-contain"
+          />
+          MySoloband
         </Link>
 
         <nav className="flex items-center gap-6 text-sm">

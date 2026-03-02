@@ -49,7 +49,7 @@ export default function ApiDocsPage() {
     <div className="min-h-screen bg-white">
       <header className="border-b border-gray-200 bg-gray-50 px-4 py-3">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <h1 className="text-lg font-semibold text-gray-900">SoloBackend API</h1>
+          <h1 className="text-lg font-semibold text-gray-900">MySoloband API</h1>
           <Link
             href="/"
             className="text-sm text-gray-600 hover:text-gray-900"

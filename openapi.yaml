@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: SoloBackend API
+  title: MySoloband API
   description: |
-    API for the SoloBackend digital music bundle store. Used by the web app and
-    mobile clients (e.g. Soloband). Authentication uses Kinde JWT; send it as
+    API for the MySoloband digital music bundle store (by tempoaide). Used by the web app and
+    mobile clients. Authentication uses Kinde JWT; send it as
     `Authorization: Bearer <access_token>` for protected endpoints.
   version: 1.0.0
 
