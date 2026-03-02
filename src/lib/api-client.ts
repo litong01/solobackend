@@ -153,7 +153,7 @@ export async function createCheckoutSession(
   bundleId: string,
   token: string,
   email?: string | null
-): Promise<string> {
+): Promise<CreateCheckoutSessionResponse> {
   const res = await apiFetch<ApiResponse<CreateCheckoutSessionResponse>>(
     "/api/purchase/create-checkout-session",
     {
@@ -162,7 +162,7 @@ export async function createCheckoutSession(
     },
     token
   );
-  return res.data.checkout_url;
+  return res.data;
 }
 
 export async function fetchDownloadUrl(
@@ -245,4 +245,29 @@ export async function updateBundle(
   }
   const data = await res.json();
   return data.data;
+}
+
+export interface ConnectStatus {
+  has_account: boolean;
+  onboarding_complete: boolean;
+  charges_enabled: boolean;
+}
+
+export async function fetchConnectStatus(token: string): Promise<ConnectStatus> {
+  const res = await apiFetch<ApiResponse<ConnectStatus>>(
+    "/api/connect/status",
+    {},
+    token
+  );
+  return res.data;
+}
+
+/** Returns the URL to redirect the user to for Stripe Connect onboarding. */
+export async function createConnectOnboardingUrl(token: string): Promise<string> {
+  const res = await apiFetch<ApiResponse<{ url: string }>>(
+    "/api/connect/onboard",
+    { method: "POST" },
+    token
+  );
+  return res.data.url;
 }

@@ -137,6 +137,7 @@ export default async function BundleDetailPage({
             <PurchaseButton
               bundleId={bundle.id}
               createdByUserId={bundle.created_by_user_id}
+              price={bundle.price}
             />
 
             <CollectionButton

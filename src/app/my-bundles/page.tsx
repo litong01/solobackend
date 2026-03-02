@@ -102,6 +102,12 @@ function MyBundlesContent() {
         >
           Create bundle
         </Link>
+        <Link
+          href="/settings/payouts"
+          className="inline-flex shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          Payouts
+        </Link>
       </div>
 
       {loading ? (

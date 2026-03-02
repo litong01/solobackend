@@ -80,6 +80,27 @@ export async function userOwnsBundle(userId: string, bundleId: string): Promise<
   return result.rowCount !== null && result.rowCount > 0;
 }
 
+/** Get entitlement row for user+bundle (for refund lookup). Returns null if not found. */
+export async function getEntitlement(
+  userId: string,
+  bundleId: string
+): Promise<(Entitlement & { stripe_payment_intent_id?: string | null }) | null> {
+  const pool = getPool();
+  const result = await pool.query(
+    "SELECT * FROM entitlements WHERE user_id = $1 AND bundle_id = $2 LIMIT 1",
+    [userId, bundleId]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    bundle_id: row.bundle_id,
+    purchased_at: row.purchased_at,
+    stripe_payment_intent_id: row.stripe_payment_intent_id ?? null,
+  };
+}
+
 /** True if the bundle has at least one purchase (entitlement). */
 export async function bundleHasPurchases(bundleId: string): Promise<boolean> {
   const pool = getPool();
@@ -92,19 +113,44 @@ export async function bundleHasPurchases(bundleId: string): Promise<boolean> {
 
 export async function createEntitlement(
   userId: string,
-  bundleId: string
-): Promise<Entitlement> {
+  bundleId: string,
+  stripePaymentIntentId?: string | null
+): Promise<Entitlement & { stripe_payment_intent_id?: string | null }> {
   const pool = getPool();
 
   const existing = await pool.query(
     "SELECT * FROM entitlements WHERE user_id = $1 AND bundle_id = $2",
     [userId, bundleId]
   );
-  if (existing.rows[0]) return existing.rows[0];
+  if (existing.rows[0]) {
+    if (stripePaymentIntentId && !existing.rows[0].stripe_payment_intent_id) {
+      await pool.query(
+        "UPDATE entitlements SET stripe_payment_intent_id = $1 WHERE user_id = $2 AND bundle_id = $3",
+        [stripePaymentIntentId, userId, bundleId]
+      );
+      return { ...existing.rows[0], stripe_payment_intent_id: stripePaymentIntentId };
+    }
+    return existing.rows[0] as Entitlement & { stripe_payment_intent_id?: string | null };
+  }
 
-  const result = await pool.query<Entitlement>(
-    "INSERT INTO entitlements (user_id, bundle_id) VALUES ($1, $2) RETURNING *",
-    [userId, bundleId]
+  const result = await pool.query<Entitlement & { stripe_payment_intent_id?: string | null }>(
+    "INSERT INTO entitlements (user_id, bundle_id, stripe_payment_intent_id) VALUES ($1, $2, $3) RETURNING *",
+    [userId, bundleId, stripePaymentIntentId ?? null]
   );
   return result.rows[0];
+}
+
+/**
+ * Revoke a purchase (delete entitlement) by Stripe PaymentIntent ID.
+ * Used when a charge is fully refunded so the buyer loses access.
+ */
+export async function revokeEntitlementByPaymentIntentId(
+  stripePaymentIntentId: string
+): Promise<boolean> {
+  const pool = getPool();
+  const result = await pool.query(
+    "DELETE FROM entitlements WHERE stripe_payment_intent_id = $1 RETURNING id",
+    [stripePaymentIntentId]
+  );
+  return (result.rowCount ?? 0) > 0;
 }

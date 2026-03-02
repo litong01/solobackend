@@ -26,6 +26,8 @@ tags:
     description: Checkout and payments
   - name: My Bundles
     description: Bundles created by the user
+  - name: Connect
+    description: Stripe Connect — creator payout onboarding and status
 
 security:
   - BearerAuth: []
@@ -433,8 +435,11 @@ paths:
   /api/purchase/create-checkout-session:
     post:
       tags: [Purchase]
-      summary: Create Stripe Checkout session
-      description: Creates a Stripe Checkout session for the given bundle. Redirect the user to the returned `checkout_url`.
+      summary: Create Checkout session or claim free bundle
+      description: |
+        For paid bundles, creates a Stripe Checkout session; redirect the user to the returned `checkout_url`.
+        For free bundles (price 0), no Stripe call is made; the entitlement is granted and the response has
+        `checkout_url` null and `free_claim` true.
       requestBody:
         required: true
         content:
@@ -452,7 +457,7 @@ paths:
                   description: Optional; used if JWT has no email claim
       responses:
         "200":
-          description: Checkout URL
+          description: Checkout URL (paid) or free claim (price 0)
           content:
             application/json:
               schema:
@@ -461,17 +466,124 @@ paths:
                 properties:
                   data:
                     type: object
-                    required: [checkout_url]
                     properties:
                       checkout_url:
                         type: string
                         format: uri
+                        nullable: true
+                        description: Stripe Checkout URL; null when free_claim is true
+                      free_claim:
+                        type: boolean
+                        description: true when bundle is free and entitlement was granted without payment
         "400":
           $ref: "#/components/responses/ValidationError"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/purchase/refund:
+    post:
+      tags: [Purchase]
+      summary: Request refund for a purchased bundle
+      description: |
+        Refunds the authenticated user's purchase of the given bundle. For Connect destination
+        charges, the refund uses reverse_transfer and refund_application_fee so the creator's
+        share and platform fee are reversed; the customer is refunded. Access is revoked when
+        Stripe sends charge.refunded.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bundle_id]
+              properties:
+                bundle_id:
+                  type: string
+                  format: uuid
+                reason:
+                  type: string
+                  enum: [duplicate, fraudulent, requested_by_customer]
+                  description: Optional; defaults to requested_by_customer
+      responses:
+        "200":
+          description: Refund created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      refund_id: { type: string }
+                      status: { type: string }
+                      amount: { type: integer, description: Amount refunded to customer (cents) }
+                      amount_refunded_to_customer: { type: integer, description: Same as amount (cents) }
+                      restocking_fee_cents: { type: integer, description: Fee retained by platform to cover Stripe processing (cents) }
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/connect/onboard:
+    post:
+      tags: [Connect]
+      summary: Create Connect onboarding link
+      description: |
+        Creates a Stripe Connect Express account (if needed) and returns a single-use URL
+        for the user to complete Connect onboarding. Redirect the user to the returned `url`.
+        After onboarding, bundle sales are paid to the creator's connected account (minus platform fee).
+      responses:
+        "200":
+          description: Onboarding URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [url]
+                    properties:
+                      url: { type: string, format: uri }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/connect/status:
+    get:
+      tags: [Connect]
+      summary: Get Connect payout status
+      description: Returns whether the authenticated user has completed Stripe Connect onboarding and can receive payouts.
+      responses:
+        "200":
+          description: Connect status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [has_account, onboarding_complete, charges_enabled]
+                    properties:
+                      has_account: { type: boolean }
+                      onboarding_complete: { type: boolean }
+                      charges_enabled: { type: boolean }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/ServerError"
 

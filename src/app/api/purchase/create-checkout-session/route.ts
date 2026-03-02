@@ -3,6 +3,8 @@ import { requireAuth, isAuthError } from "@/lib/auth";
 import { getBundleById } from "@/services/bundle.service";
 import { createCheckoutSession } from "@/services/checkout.service";
 import { findOrCreateUser } from "@/services/user.service";
+import { createEntitlement } from "@/services/entitlement.service";
+import { removeSavedOnPurchase } from "@/services/collection.service";
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -29,9 +31,17 @@ export async function POST(request: NextRequest) {
 
     await findOrCreateUser(auth.id, auth.email);
 
+    if (bundle.price === 0) {
+      await createEntitlement(auth.id, bundle_id, null);
+      await removeSavedOnPurchase(auth.id, bundle_id);
+      return NextResponse.json({
+        data: { checkout_url: null, free_claim: true },
+      });
+    }
+
     const email = bodyEmail ?? auth.email;
     const checkoutUrl = await createCheckoutSession(bundle, auth.id, email);
-    return NextResponse.json({ data: { checkout_url: checkoutUrl } });
+    return NextResponse.json({ data: { checkout_url: checkoutUrl, free_claim: false } });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("Error creating checkout session:", message, err);

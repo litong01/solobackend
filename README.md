@@ -24,7 +24,7 @@ A single-container full-stack application for selling digital music bundles (PDF
 
 **Authentication:** User clicks Sign in → browser redirects to Kinde (PKCE flow) → Kinde returns a JWT → browser stores it → sends it as `Authorization: Bearer <token>` on API calls → server verifies the JWT signature locally using Kinde's public JWKS keys. The server never talks to Kinde directly.
 
-**Purchase:** User clicks Purchase → API route creates a Stripe Checkout session → user pays on Stripe's hosted page → Stripe calls `/api/stripe/webhook` → entitlement recorded in Postgres.
+**Purchase:** User clicks Purchase → API route creates a Stripe Checkout session → user pays on Stripe's hosted page → Stripe calls `/api/stripe/webhook` → entitlement recorded in Postgres. **Free bundles (price $0):** No Stripe call; the API grants the entitlement directly and returns `free_claim: true`, so the platform is not charged. The user still clicks **Get for free** (Purchase button) to claim; they are not redirected to Stripe.
 
 **Download:** User clicks Download → API route verifies JWT, checks entitlement → generates a 5-minute pre-signed R2 URL → returns URL to browser.
 
@@ -53,7 +53,7 @@ Kinde handles user login. The browser SDK manages the PKCE OAuth flow entirely o
 
 ### Stripe (Payments)
 
-Stripe handles checkout and payment processing. Users are redirected to Stripe's hosted checkout page — no Stripe UI is embedded in the app.
+Stripe handles checkout and payment processing for **paid** bundles. Users are redirected to Stripe's hosted checkout page — no Stripe UI is embedded in the app. **Free bundles** (price $0) never touch Stripe: the app grants the entitlement directly, so Stripe does not charge for those.
 
 | Variable | What it is | How to obtain it |
 |----------|-----------|-----------------|
@@ -73,10 +73,42 @@ The CLI prints a signing secret like `whsec_...` — use that as `STRIPE_WEBHOOK
 
 1. In the Stripe Dashboard, go to **Developers → Webhooks → Add endpoint**.
 2. Set the URL to `https://your-production-domain.com/api/stripe/webhook`.
-3. Under "Select events to listen to", choose **`checkout.session.completed`**.
+3. Under "Select events to listen to", choose **`checkout.session.completed`** and **`charge.refunded`**.
 4. After creating the endpoint, click into it and reveal the **Signing secret**.
 
 Both values are server-only (never exposed to the browser).
+
+**Stripe Connect (bundle creator payouts)**
+
+Bundle creators can receive money when users buy their bundles. The app uses **Stripe Connect** with **Express** accounts:
+
+1. **Enable Connect** in the [Stripe Dashboard](https://dashboard.stripe.com/settings/connect): **Connect settings → enable Connect** and choose your branding.
+2. **Creator onboarding:** Creators go to **My Bundles → Payouts** (or `/settings/payouts`) and click "Set up payouts with Stripe". They are redirected to Stripe’s hosted onboarding to create an Express connected account (bank details, identity, etc.).
+3. **When a buyer purchases a bundle:** If the bundle has a creator who has completed Connect onboarding, the payment is created as a **destination charge**: the full amount is transferred to the creator’s connected account, and the **application fee** (platform fee) is sent back to your platform. If the creator has not set up Connect, the full payment goes to your platform account.
+4. **Platform fee:** Set `STRIPE_APPLICATION_FEE_PERCENT` (e.g. `10` for 10%). Default is 10% if unset.
+5. **Payout schedule:** By default, Stripe pays out connected accounts on a **daily** schedule. To pay creators **once per month** (e.g. last day of the month), use either:
+   - **Stripe Dashboard:** Connect → select the connected account → **Settings → Payouts** → set **Payout schedule** to **Monthly** and choose the day (e.g. last day).
+   - **Balance Settings API:** If your Stripe SDK supports it, call the [Balance Settings API](https://docs.stripe.com/api/balance-settings/update) for each connected account with `interval: "monthly"` and `monthly_payout_days: [31]` (31 = last day of month). The Node SDK may expose this as `stripe.balanceSettings.update(..., { stripeAccount })` in newer versions.
+
+**Refunds (including Connect)**
+
+When a purchase is refunded (via the app’s **POST /api/purchase/refund** or from the Stripe Dashboard), the app creates the refund with **`reverse_transfer: true`** and **`refund_application_fee: true`**. That way:
+
+- The **customer** is refunded (from the platform balance).
+- The **creator’s share** is taken back from their connected account (Stripe reverses the transfer).
+- The **platform’s application fee** is refunded (your platform gives back its cut).
+
+**Restocking fee:** Stripe does not refund the processing fee it kept on the original charge, so the platform would lose that amount on every refund. To avoid that, refunds issued via the app are **partial**: the customer receives **(charge amount − restocking fee)** and the platform keeps the restocking fee to cover the non-refunded Stripe fee. The restocking fee defaults to **2.9% + 30¢** (aligned with Stripe’s typical fee). Configure with:
+
+- `STRIPE_RESTOCKING_FEE_PERCENT` (default `2.9`)
+- `STRIPE_RESTOCKING_FEE_FIXED_CENTS` (default `30`)
+- `STRIPE_RESTOCKING_FEE_MAX_PERCENT` (default `50`) — cap so customer gets at least (100 − this)% back on small refunds
+
+**Small sales:** For small charges (e.g. $0.50), 30¢ + 2.9% can exceed the sale amount or leave almost nothing for the customer. The restocking fee is **capped** so it never exceeds a percentage of the charge; the customer always gets at least that share back. Set **`STRIPE_RESTOCKING_FEE_MAX_PERCENT`** (default `50`): the restocking fee is at most this % of the charge, so the customer gets at least **(100 − MAX_PERCENT)%** refunded. Example: for a 50¢ charge with default 50% cap, fee = min(31¢, 25¢) = 25¢, so the customer receives 25¢ back.
+
+The refund API response includes `amount_refunded_to_customer` and `restocking_fee_cents` so the UI can show the net refund and the retained fee. Access to the bundle is revoked as soon as the refund is created.
+
+Refunds triggered in the Dashboard are full refunds (no restocking fee); use the app’s refund endpoint if you want the restocking fee applied.
 
 **Stripe test cards (test mode only)**
 
@@ -339,6 +371,7 @@ A full **OpenAPI 3.0** specification is in the repo root: **`openapi.yaml`**. Us
 | GET | `/api/collection/check?bundle_id=` | Bearer | Check if bundle is saved in collection |
 | DELETE | `/api/collection/:bundleId` | Bearer | Remove bundle from collection |
 | POST | `/api/purchase/create-checkout-session` | Bearer | Create Stripe Checkout session |
+| POST | `/api/purchase/refund` | Bearer | Request refund for a purchased bundle (Connect: reverses transfer + app fee) |
 | GET | `/api/my-bundles` | Bearer | Bundles created by the user |
 | POST | `/api/stripe/webhook` | Stripe sig | Handle purchase confirmation (internal) |
 

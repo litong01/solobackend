@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
-import { createEntitlement } from "@/services/entitlement.service";
+import { createEntitlement, revokeEntitlementByPaymentIntentId } from "@/services/entitlement.service";
 import { removeSavedOnPurchase } from "@/services/collection.service";
 import { findOrCreateUser } from "@/services/user.service";
 
@@ -47,7 +47,11 @@ export async function POST(request: NextRequest) {
 
     try {
       await findOrCreateUser(userId, session.customer_email || "");
-      await createEntitlement(userId, bundleId);
+      const paymentIntentId =
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : session.payment_intent?.id ?? null;
+      await createEntitlement(userId, bundleId, paymentIntentId);
       await removeSavedOnPurchase(userId, bundleId);
       console.log(`Entitlement created: user=${userId} bundle=${bundleId}`);
     } catch (err) {
@@ -56,6 +60,30 @@ export async function POST(request: NextRequest) {
         { error: "server_error", message: "Failed to process purchase" },
         { status: 500 }
       );
+    }
+  }
+
+  if (event.type === "charge.refunded") {
+    const charge = event.data.object as Stripe.Charge;
+    const paymentIntentId =
+      typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
+    if (!paymentIntentId) {
+      console.warn("charge.refunded: no payment_intent on charge", charge.id);
+      return NextResponse.json({ received: true });
+    }
+    // Only revoke access when the charge is fully refunded
+    const amountRefunded = charge.amount_refunded ?? 0;
+    const amountCharged = charge.amount ?? 0;
+    const isFullRefund = amountCharged > 0 && amountRefunded >= amountCharged;
+    if (isFullRefund) {
+      try {
+        const revoked = await revokeEntitlementByPaymentIntentId(paymentIntentId);
+        if (revoked) {
+          console.log(`Entitlement revoked for refund: payment_intent=${paymentIntentId}`);
+        }
+      } catch (err) {
+        console.error("Error revoking entitlement on refund:", err);
+      }
     }
   }
 

@@ -2,6 +2,8 @@ export interface User {
   id: string;
   email: string;
   created_at: string;
+  /** Stripe Connect Express account ID when creator has completed Connect onboarding. */
+  stripe_connect_account_id?: string | null;
 }
 
 export interface Bundle {
@@ -40,6 +42,8 @@ export interface Entitlement {
   user_id: string;
   bundle_id: string;
   purchased_at: string;
+  /** Set when created from Stripe Checkout; used to revoke access on refund. */
+  stripe_payment_intent_id?: string | null;
 }
 
 export interface EntitlementWithBundle extends Entitlement {
@@ -53,7 +57,10 @@ export interface CreateCheckoutSessionRequest {
 }
 
 export interface CreateCheckoutSessionResponse {
-  checkout_url: string;
+  /** Stripe Checkout URL when the bundle is paid; null when free (use free_claim). */
+  checkout_url: string | null;
+  /** True when the bundle is free and entitlement was granted without payment. */
+  free_claim?: boolean;
 }
 
 export interface DownloadResponse {
