@@ -15,21 +15,6 @@ function formatPrice(price: number): string {
   }).format(price);
 }
 
-function fileTypeLabel(type: string): string {
-  const labels: Record<string, string> = {
-    pdf: "PDF Score",
-    musicxml: "MusicXML",
-    json: "JSON Data",
-  };
-  return labels[type] || type.toUpperCase();
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 export default async function BundleDetailPage({
   params,
 }: {
@@ -168,59 +153,6 @@ export default async function BundleDetailPage({
                 />
               </div>
             )}
-
-            <div className="mt-6">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
-                Included Files
-              </h3>
-              {bundle.r2_key ? (
-                <ul className="mt-3 space-y-2">
-                  <li className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
-                    <span className="font-medium text-gray-700">Compressed bundle</span>
-                  </li>
-                </ul>
-              ) : metadata?.files ? (
-                <ul className="mt-3 space-y-2">
-                  {metadata.files.map((file) => (
-                    <li
-                      key={file.key}
-                      className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm"
-                    >
-                      <span className="font-medium text-gray-700">
-                        {fileTypeLabel(file.type)}
-                      </span>
-                      <span className="text-gray-400">
-                        {formatBytes(file.size_bytes)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <ul className="mt-3 space-y-2">
-                  {["PDF Score", "MusicXML", "JSON Data"].map((lbl) => (
-                    <li
-                      key={lbl}
-                      className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600"
-                    >
-                      <svg
-                        className="h-4 w-4 text-green-500"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="m4.5 12.75 6 6 9-13.5"
-                        />
-                      </svg>
-                      {lbl}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
           </div>
         </div>
       </div>

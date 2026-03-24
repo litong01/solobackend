@@ -5,7 +5,7 @@ import { Header } from "@/components/Header";
 import { AuthProvider } from "@/components/AuthProvider";
 
 export const metadata: Metadata = {
-  title: "MySoloband — Digital Music Bundles",
+  title: "MySoloband — Music Bundles",
   description:
     "Purchase and download professional music scores in PDF, MusicXML, and JSON formats.",
 };

@@ -16,11 +16,10 @@ export default async function HomePage() {
     <div className="mx-auto max-w-6xl px-4 py-12">
       <div className="mb-10 text-center">
         <h1 className="text-4xl font-bold tracking-tight text-gray-900">
-          Digital Music Bundles
+          Mysoloband Music Bundles
         </h1>
         <p className="mt-3 text-lg text-gray-500">
-          Professional scores in PDF, MusicXML, and JSON — ready for practice,
-          performance, and analysis.
+         Interactive music and learning bundles made for MySoloband.
         </p>
       </div>
 
